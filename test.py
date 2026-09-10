@@ -50,12 +50,16 @@ for i, embedding in enumerate(para_embeddings, start = 1):
 similarity.sort(reverse=True)
 para_similarity.sort(reverse=True)
 
-print('----------100 Words-----------')
+print('----------100 Characters-----------')
 for sim, i in similarity:
+    print('Chunk: ', chunks[i-1])
     print(f'Chunk {i} | Similarity {sim}')
+    print('-----------------------------')
 print('------------------------------')
 
 print('---------Paragraphs-----------')
 for sim, i in para_similarity:
+    print('Chunk: ', para_chunks[i-1])
     print(f'Chunk {i} | Similarity {sim}')
+    print('-----------------------------')
 print('------------------------------')
