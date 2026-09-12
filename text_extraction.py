@@ -1,6 +1,7 @@
 import pymupdf
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
+import chromadb
 
 doc = pymupdf.open('Introduction to Machine Learning.pdf')
 
@@ -148,12 +149,39 @@ chunk_texts = [chunk['text'] for chunk in chunks]
 
 embeddings = model.encode(chunk_texts)
 
-query = input('Enter query: ')
+client = chromadb.PersistentClient(path='./chroma_db')
 
-results = retrieve(query, chunks, embeddings)
+collection = client.get_or_create_collection('ml-book')
 
-for result in results:
-    print(f"Similarity: {result['similarity']:.4f}")
-    print(f"Pages: {result['page_start']} - {result['page_end']}")
-    print(result["text"])
-    print("-" * 80)
+ids = []
+document_text = []
+metadata = []
+embedding_list = []
+
+for i, chunk in enumerate(chunks):
+    ids.append(str(i))
+    document_text.append(chunk['text'])
+    metadata.append({
+        'page_start' : chunk['page_start'],
+        'page_end' : chunk['page_end']
+    })
+    embedding_list.append(embeddings[i].tolist())
+
+collection.add(ids=ids, documents=document_text, metadatas=metadata, embeddings=embedding_list)
+
+query = "How does k-nearest neighbors make predictions?"
+
+query_embedding = model.encode(query)
+
+results = collection.query(
+    query_embeddings=[query_embedding.tolist()],
+    n_results=5
+)
+
+for i in range(5):
+    print("RESULT", i + 1)
+    print("Distance:", results["distances"][0][i])
+    print("Pages:", results["metadatas"][0][i]["page_start"],
+          "-", results["metadatas"][0][i]["page_end"])
+    print("Text:", results["documents"][0][i])
+    print()
