@@ -1,37 +1,55 @@
 import pymupdf
+from sentence_transformers import SentenceTransformer
+from sentence_transformers.util import cos_sim
 
 doc = pymupdf.open('Introduction to Machine Learning.pdf')
 
-def extract_page(page):
+def extract_page(page, page_num):
 
     page_height = page.rect.height
 
-    blocks = page.get_text("blocks")
+    blocks = page.get_text("dict")["blocks"]
 
     clean_blocks = []
 
     for block in blocks:
 
-        x0, y0, x1, y1, block_text, block_no, block_type = block
+        if "lines" not in block:
+            continue
+
+        x0, y0, x1, y1 = block["bbox"]
 
         # Ignore blocks at the bottom of the page
         if y0 > page_height - 51.3:
             continue
 
-        # Replace line breaks inside a block with spaces
-        block_text = block_text.replace('\n', ' ')
+        # Get text and font size
+        block_text = ""
+        font_sizes = []
 
-        #Remove special hyphens
+        for line in block["lines"]:
+            for span in line["spans"]:
+                block_text += span["text"]
+                font_sizes.append(span["size"])
+
+        # Remove special hyphenation
         block_text = block_text.replace('‐ ', '')
 
-        # Remove extra spaces
+        # Replace line breaks / extra whitespace
         block_text = ' '.join(block_text.split())
 
-        clean_blocks.append(block_text)
+        if not block_text:
+            continue
+
+        clean_blocks.append({
+            "text": block_text,
+            "page": page_num,
+            "font_size": max(font_sizes)
+        })
 
     return clean_blocks
 
-def create_chunks(blocks, max_words = 200):
+def create_chunks(blocks, max_words=200):
 
     chunks = []
 
@@ -40,15 +58,28 @@ def create_chunks(blocks, max_words = 200):
 
     for block in blocks:
 
-        text = block['text']
-        words = text.split()
-        word_count = len(words)
+        text = block["text"]
+        word_count = len(text.split())
 
-        if current_words + word_count > max_words and current_chunk:
+        # If this is a heading, finish the previous chunk
+        if is_heading(block) and current_chunk:
+
             chunks.append({
                 "text": " ".join(block["text"] for block in current_chunk),
-                'page_start' : current_chunk[0]['page'],
-                'page_end' : current_chunk[-1]['page']
+                "page_start": current_chunk[0]["page"],
+                "page_end": current_chunk[-1]["page"]
+            })
+
+            current_chunk = []
+            current_words = 0
+
+        # If adding this block would exceed the limit
+        if current_words + word_count > max_words and current_chunk:
+
+            chunks.append({
+                "text": " ".join(block["text"] for block in current_chunk),
+                "page_start": current_chunk[0]["page"],
+                "page_end": current_chunk[-1]["page"]
             })
 
             current_chunk = []
@@ -57,46 +88,72 @@ def create_chunks(blocks, max_words = 200):
         current_chunk.append(block)
         current_words += word_count
 
+    # Add remaining blocks
     if current_chunk:
+
         chunks.append({
-                "text": " ".join(block["text"] for block in current_chunk),
-                'page_start' : current_chunk[0]['page'],
-                'page_end' : current_chunk[-1]['page']
+            "text": " ".join(block["text"] for block in current_chunk),
+            "page_start": current_chunk[0]["page"],
+            "page_end": current_chunk[-1]["page"]
         })
 
     return chunks
 
-all_blocks = []
+def is_heading(block):
+     return block["font_size"] > 15
 
-#Extract blocks from each page and store them along with their page numbers
-for page_num, page in enumerate(doc):
+def retrieve(query, chunks, embeddings, k=5):
 
-    blocks = extract_page(page)
+    query_embedding = model.encode(query)
 
-    for block in blocks:
+    similarities = []
 
-        all_blocks.append({
-            "text": block,
-            "page": page_num + 1
+    for i, embedding in enumerate(embeddings):
+
+        similarity = cos_sim(query_embedding, embedding).item()
+
+        similarities.append((similarity, i))
+
+    similarities.sort(reverse=True)
+
+    results = []
+
+    for similarity, i in similarities[:k]:
+
+        results.append({
+            "text": chunks[i]["text"],
+            "similarity": similarity,
+            "page_start": chunks[i]["page_start"],
+            "page_end": chunks[i]["page_end"]
         })
 
-#print("Total blocks:", len(all_blocks))
+    return results
+
+all_blocks = []
+
+for page_num, page in enumerate(doc, start = 1):
+
+    blocks = extract_page(page, page_num )
+
+    for block in blocks:
+        all_blocks.append(block)
 
 content_blocks = all_blocks[54:]
 
-#Printing first 100 blocks
-#for i in range(100):
-#    print(f'Block {i} | Page {content_blocks[i]['page']}')
-#    print(content_blocks[i]['text'])
-#    print('-'*80)
-
 chunks = create_chunks(content_blocks)
 
-print('Number of chunks: ', len(chunks))
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-for i in range(10):
-    print(f"\nChunk {i}")
-    print(f"Pages: {chunks[i]['page_start']} - {chunks[i]['page_end']}")
-    print(f"Words: {len(chunks[i]['text'].split())}")
-    print(chunks[i]["text"])
+chunk_texts = [chunk['text'] for chunk in chunks]
+
+embeddings = model.encode(chunk_texts)
+
+query = input('Enter query: ')
+
+results = retrieve(query, chunks, embeddings)
+
+for result in results:
+    print(f"Similarity: {result['similarity']:.4f}")
+    print(f"Pages: {result['page_start']} - {result['page_end']}")
+    print(result["text"])
     print("-" * 80)
