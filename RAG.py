@@ -86,7 +86,7 @@ def ask_rag(query, k=5):
 
     # 4. Ask Gemini
     response = client.interactions.create(
-        model="gemini-3.6-flash",
+        model="gemini-3.8-flash",
         input=prompt
     )
 
