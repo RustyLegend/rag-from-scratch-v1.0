@@ -103,35 +103,30 @@ def create_chunks(blocks, max_words=200):
 def is_heading(block):
      return block["font_size"] > 15
 
-def retrieve(query, chunks, embeddings, k=5):
+def retrieve(query, k=5):
 
     query_embedding = model.encode(query)
 
-    similarities = []
+    results = collection.query(
+        query_embeddings=[query_embedding.tolist()],
+        n_results=k
+    )
 
-    for i, embedding in enumerate(embeddings):
+    retrieved = []
 
-        similarity = cos_sim(query_embedding, embedding).item()
-
-        similarities.append((similarity, i))
-
-    similarities.sort(reverse=True)
-
-    results = []
-
-    for similarity, i in similarities[:k]:
-
-        results.append({
-            "text": chunks[i]["text"],
-            "similarity": similarity,
-            "page_start": chunks[i]["page_start"],
-            "page_end": chunks[i]["page_end"]
+    for i in range(k):
+        retrieved.append({
+            "text": results["documents"][0][i],
+            "distance": results["distances"][0][i],
+            "page_start": results["metadatas"][0][i]["page_start"],
+            "page_end": results["metadatas"][0][i]["page_end"]
         })
 
-    return results
+    return retrieved
 
 all_blocks = []
 
+#Extract blocks from each page of the document
 for page_num, page in enumerate(doc, start = 1):
 
     blocks = extract_page(page, page_num )
@@ -139,25 +134,24 @@ for page_num, page in enumerate(doc, start = 1):
     for block in blocks:
         all_blocks.append(block)
 
+#Remove the starting pages blocks which are irrelevant
 content_blocks = all_blocks[54:]
 
+#Create chunks from the blocks retrieved
 chunks = create_chunks(content_blocks)
 
+#Embeeding the chunks
 model = SentenceTransformer('all-MiniLM-L6-v2')
-
 chunk_texts = [chunk['text'] for chunk in chunks]
-
 embeddings = model.encode(chunk_texts)
 
+#Create and add the chunks to Chroma DB
 client = chromadb.PersistentClient(path='./chroma_db')
-
 collection = client.get_or_create_collection('ml-book')
-
 ids = []
 document_text = []
 metadata = []
 embedding_list = []
-
 for i, chunk in enumerate(chunks):
     ids.append(str(i))
     document_text.append(chunk['text'])
@@ -166,22 +160,15 @@ for i, chunk in enumerate(chunks):
         'page_end' : chunk['page_end']
     })
     embedding_list.append(embeddings[i].tolist())
-
 collection.add(ids=ids, documents=document_text, metadatas=metadata, embeddings=embedding_list)
 
-query = "How does k-nearest neighbors make predictions?"
+#Retrieve top 5 results for a query
+query = 'How does k-nearest neighbors make predictions?'
+results = retrieve(query)
 
-query_embedding = model.encode(query)
-
-results = collection.query(
-    query_embeddings=[query_embedding.tolist()],
-    n_results=5
-)
-
-for i in range(5):
-    print("RESULT", i + 1)
-    print("Distance:", results["distances"][0][i])
-    print("Pages:", results["metadatas"][0][i]["page_start"],
-          "-", results["metadatas"][0][i]["page_end"])
-    print("Text:", results["documents"][0][i])
+#Printing the results
+for result in results:
+    print(result["distance"])
+    print(result["page_start"], "-", result["page_end"])
+    print(result["text"])
     print()
