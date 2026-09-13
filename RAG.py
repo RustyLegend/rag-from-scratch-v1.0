@@ -3,11 +3,13 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import chromadb
 
-def retrieve(query, k=5):
+transformer_model = SentenceTransformer('all-MiniLM-L6-v2')
+chroma_client = chromadb.PersistentClient('./chroma_db')
+collection = chroma_client.get_collection('ml-book')
+load_dotenv()
+client = genai.Client()
 
-    transformer_model = SentenceTransformer('all-MiniLM-L6-v2')
-    chroma_client = chromadb.PersistentClient('./chroma_db')
-    collection = chroma_client.get_collection('ml-book')
+def retrieve(query, k=5):
 
     query_embedding = transformer_model.encode(query)
 
@@ -72,9 +74,6 @@ Answer:
     return prompt
 
 def ask_rag(query, k=5):
-
-    load_dotenv()
-    client = genai.Client()
 
     # 1. Retrieve relevant chunks
     results = retrieve(query, k)
