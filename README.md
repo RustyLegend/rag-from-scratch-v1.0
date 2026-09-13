@@ -89,8 +89,8 @@ rag-ml-book/
 Clone the repository:
 
 ```bash
-git clone https://github.com/RustyLegend/rag-from-scratch
-cd rag-from-scratch
+git clone https://github.com/RustyLegend/rag-from-scratch-v1.0
+cd rag-from-scratch-v1.0
 ```
 
 Install dependencies:
