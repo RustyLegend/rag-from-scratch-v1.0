@@ -143,24 +143,29 @@ def create_context(results):
 def build_prompt(query, context):
 
     prompt = f"""
-    You are answering questions about a machine learning textbook.
+You are answering questions about a machine learning textbook.
 
-    Use only the information provided in the passages below to answer
-    the question.
+Use only the information provided in the retrieved passages.
 
-    If the passages do not contain enough information to answer the
-    question, say that the answer cannot be determined from the
-    provided passages.
+Answer the question clearly and concisely.
 
-    Retrieved passages:
+Cite the page or page range where the information came from.
+If multiple retrieved passages overlap in their page ranges,
+combine them into a single citation rather than repeating them.
 
-    {context}
+If the passages do not contain enough information to answer the
+question, say that the answer cannot be determined from the
+provided passages.
 
-    Question:
-    {query}
+Retrieved passages:
 
-    Answer:
-    """
+{context}
+
+Question:
+{query}
+
+Answer:
+"""
 
     return prompt
 
@@ -224,8 +229,7 @@ for i, chunk in enumerate(chunks):
     embedding_list.append(embeddings[i].tolist())
 collection.add(ids=ids, documents=document_text, metadatas=metadata, embeddings=embedding_list)
 
-
+#Answer the query using the retrieved chunks and query using an LLM
 query = input('Enter a query: ')
 answer = ask_rag(query)
-
 print(answer)
