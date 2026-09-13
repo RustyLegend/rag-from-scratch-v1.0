@@ -1,6 +1,5 @@
 import pymupdf
 from sentence_transformers import SentenceTransformer
-from sentence_transformers.util import cos_sim
 import chromadb
 
 doc = pymupdf.open('Introduction to Machine Learning.pdf')
@@ -18,7 +17,7 @@ def extract_page(page, page_num):
         if "lines" not in block:
             continue
 
-        x0, y0, x1, y1 = block["bbox"]
+        y0 = block["bbox"][1]
 
         # Ignore blocks at the bottom of the page
         if y0 > page_height - 51.3:
@@ -116,17 +115,17 @@ for page_num, page in enumerate(doc, start = 1):
 #Remove the starting pages blocks which are irrelevant
 content_blocks = all_blocks[54:]
 
-#Create chunks from the blocks retrieved
+# Create chunks from the extracted blocks
 chunks = create_chunks(content_blocks)
 print("Number of chunks:", len(chunks))
 
-#Embeeding the chunks
+# Embed the chunks
 model = SentenceTransformer('all-MiniLM-L6-v2')
 chunk_texts = [chunk['text'] for chunk in chunks]
 embeddings = model.encode(chunk_texts)
 print("Embedding shape:", embeddings.shape)
 
-#Create and add the chunks to Chroma DB
+# Create and store the chunks in Chroma DB
 client = chromadb.PersistentClient(path='./chroma_db')
 collection = client.get_or_create_collection('ml-book')
 ids = []
